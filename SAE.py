@@ -210,17 +210,17 @@ class WAE_MMD_abstract(nn.Module):
                         self.best_obj[0] = epoch + 1
                         self.best_obj[1] = obj
                         self.save(self.save_path)
-                        print("model saved, obj: %.6e" % obj)
+                        self.log.info("model saved, obj: %.6e" % obj)
                         
             if self.lamb_exp is not None:
                 self.lamb = self.lamb_exp * self.lamb
             
         if not self.validate_batch:
             self.save(self.save_path)
-            print("model saved at: %s" % self.save_path)
+            self.log.info("model saved at: %s" % self.save_path)
         elif not self.save_best:
             self.save(self.save_path)
-            print("model saved at: %s" % self.save_path)
+            self.log.info("model saved at: %s" % self.save_path)
 
         self.log.info('Training Finished!')
         self.log.info("Elapsed time: %.3fs" % (time.time() - start_time))
