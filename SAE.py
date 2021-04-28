@@ -211,14 +211,14 @@ class WAE_MMD_abstract(nn.Module):
                         self.best_obj[1] = obj
                         self.save(self.save_path)
                         self.log.info("model saved, obj: %.6e" % obj)
+                else:
+                    self.save(self.save_path)
+                    self.log.info("model saved at: %s" % self.save_path)
                         
             if self.lamb_exp is not None:
                 self.lamb = self.lamb_exp * self.lamb
             
         if not self.validate_batch:
-            self.save(self.save_path)
-            self.log.info("model saved at: %s" % self.save_path)
-        elif not self.save_best:
             self.save(self.save_path)
             self.log.info("model saved at: %s" % self.save_path)
 
