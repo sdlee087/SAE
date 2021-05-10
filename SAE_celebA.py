@@ -16,10 +16,11 @@ from .util import init_params, inc_avg
 import numpy as np
 
 class SAE_celebA(SAE_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(SAE_celebA, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(SAE_celebA, self).__init__(network_info, log, device, verbose)
         self.d = 64
         d = self.d
+        self.z_dim = network_info['train']['z_dim']
         self.enc = nn.Sequential(
             nn.Conv2d(3, d, kernel_size = 5, stride = 2, padding = 2),
             nn.BatchNorm2d(d),
@@ -42,11 +43,11 @@ class SAE_celebA(SAE_abstract):
             nn.ReLU(True),
             
             nn.Flatten(),
-            nn.Linear(16*4*d, 64),
+            nn.Linear(16*4*d, self.z_dim),
             ).to(device)
         self.dec = nn.Sequential(
             
-            nn.Linear(64, 64*8*d),
+            nn.Linear(self.z_dim, 64*8*d),
             nn.Unflatten(1, (8*d, 8, 8)),
             
             nn.ConvTranspose2d(8*d, 4*d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
@@ -57,11 +58,15 @@ class SAE_celebA(SAE_abstract):
             nn.BatchNorm2d(2*d),
             nn.LeakyReLU(0.1, True),
             
+            nn.Conv2d(2*d, 2*d, kernel_size = 3, padding = 1),
+            nn.BatchNorm2d(2*d),
+            nn.LeakyReLU(0.1, True),
+            
             nn.ConvTranspose2d(2*d, d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
             nn.BatchNorm2d(d),
             nn.LeakyReLU(0.1, True),
             
-            nn.Conv2d(d, d, kernel_size = 5, padding = 2),
+            nn.Conv2d(d, d, kernel_size = 3, padding = 1),
             nn.BatchNorm2d(d),
             nn.LeakyReLU(0.1, True),
             
@@ -73,13 +78,12 @@ class SAE_celebA(SAE_abstract):
         init_params(self.enc)
         init_params(self.dec)
 
-        self.z_dim = 64
         self.hist = network_info['train']['histogram']
 
 
 class SAE_celebA_v0(SAE_celebA):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(SAE_celebA_v0, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(SAE_celebA_v0, self).__init__(network_info, log, device, verbose)
         self.d = 64
         d = self.d
 
@@ -105,11 +109,11 @@ class SAE_celebA_v0(SAE_celebA):
             nn.ReLU(True),
             
             nn.Flatten(),
-            nn.Linear(16*4*d, 64),
+            nn.Linear(16*4*d, self.z_dim),
             ).to(device)
         self.dec = nn.Sequential(
             
-            nn.Linear(64, 64*8*d),
+            nn.Linear(self.z_dim, 64*8*d),
             nn.Unflatten(1, (8*d, 8, 8)),
             
             nn.ConvTranspose2d(8*d, 4*d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
@@ -120,11 +124,15 @@ class SAE_celebA_v0(SAE_celebA):
             nn.BatchNorm2d(2*d),
             nn.ReLU(True),
             
+            nn.Conv2d(2*d, 2*d, kernel_size = 3, padding = 1),
+            nn.BatchNorm2d(2*d),
+            nn.ReLU(True),
+            
             nn.ConvTranspose2d(2*d, d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
             nn.BatchNorm2d(d),
             nn.ReLU(True),
             
-            nn.Conv2d(d, d, kernel_size = 5, padding = 2),
+            nn.Conv2d(d, d, kernel_size = 3, padding = 1),
             nn.BatchNorm2d(d),
             nn.ReLU(True),
             
@@ -137,52 +145,11 @@ class SAE_celebA_v0(SAE_celebA):
         init_params(self.dec)
 
 class WAE_MMD_celebA(WAE_MMD_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(WAE_MMD_celebA, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(WAE_MMD_celebA, self).__init__(network_info, log, device, verbose)
         self.d = 64
         d = self.d
-        # self.enc = nn.Sequential(
-        #     nn.Conv2d(3, d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(d),
-        #     nn.ReLU(True),
-
-        #     nn.Conv2d(d, 2*d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(2*d),
-        #     nn.ReLU(True),
-
-        #     nn.Conv2d(2*d, 4*d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(4*d),
-        #     nn.ReLU(True),
-
-        #     nn.Conv2d(4*d, 8*d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(8*d),
-        #     nn.ReLU(True),
-
-        #     nn.Flatten(),
-        #     nn.Linear(16*8*d, 64),
-        #     ).to(device)
-        # self.dec = nn.Sequential(
-            
-        #     nn.Linear(64, 64*8*d),
-        #     nn.Unflatten(1, (8*d, 8, 8)),
-            
-        #     nn.ConvTranspose2d(8*d, 4*d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(4*d),
-        #     nn.LeakyReLU(0.1, True),
-            
-        #     nn.ConvTranspose2d(4*d, 2*d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(2*d),
-        #     nn.LeakyReLU(0.1, True),
-            
-        #     nn.ConvTranspose2d(2*d, d, kernel_size = 4, stride = 2, padding = 1, bias = False),
-        #     nn.BatchNorm2d(d),
-        #     nn.LeakyReLU(0.1, True),
-            
-        #     # reconstruction
-        #     nn.ConvTranspose2d(d, 3, kernel_size = 1),
-        #     nn.Sigmoid(),
-            
-        #     ).to(device)
+        self.z_dim = network_info['train']['z_dim']
         self.enc = nn.Sequential(
             nn.Conv2d(3, d, kernel_size = 5, stride = 2, padding = 2),
             nn.BatchNorm2d(d),
@@ -205,11 +172,11 @@ class WAE_MMD_celebA(WAE_MMD_abstract):
             nn.ReLU(True),
             
             nn.Flatten(),
-            nn.Linear(16*4*d, 64),
+            nn.Linear(16*4*d, self.z_dim),
             ).to(device)
         self.dec = nn.Sequential(
             
-            nn.Linear(64, 64*8*d),
+            nn.Linear(self.z_dim, 64*8*d),
             nn.Unflatten(1, (8*d, 8, 8)),
             
             nn.ConvTranspose2d(8*d, 4*d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
@@ -220,11 +187,15 @@ class WAE_MMD_celebA(WAE_MMD_abstract):
             nn.BatchNorm2d(2*d),
             nn.LeakyReLU(0.1, True),
             
+            nn.Conv2d(2*d, 2*d, kernel_size = 3, padding = 1),
+            nn.BatchNorm2d(2*d),
+            nn.LeakyReLU(0.1, True),
+            
             nn.ConvTranspose2d(2*d, d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
             nn.BatchNorm2d(d),
             nn.LeakyReLU(0.1, True),
             
-            nn.Conv2d(d, d, kernel_size = 5, padding = 2),
+            nn.Conv2d(d, d, kernel_size = 3, padding = 1),
             nn.BatchNorm2d(d),
             nn.LeakyReLU(0.1, True),
             
@@ -236,7 +207,6 @@ class WAE_MMD_celebA(WAE_MMD_abstract):
         init_params(self.enc)
         init_params(self.dec)
 
-        self.z_dim = 64
         self.hist = network_info['train']['histogram']
         
     def k(self, x, y):
@@ -245,10 +215,11 @@ class WAE_MMD_celebA(WAE_MMD_abstract):
 
 
 class WAE_MMD_celebA_v0(WAE_MMD_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(WAE_MMD_celebA_v0, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(WAE_MMD_celebA_v0, self).__init__(network_info, log, device, verbose)
         self.d = 64
         d = self.d
+        self.z_dim = network_info['train']['z_dim']
         self.enc = nn.Sequential(
             nn.Conv2d(3, d, kernel_size = 5, stride = 2, padding = 2),
             nn.BatchNorm2d(d),
@@ -271,11 +242,11 @@ class WAE_MMD_celebA_v0(WAE_MMD_abstract):
             nn.ReLU(True),
             
             nn.Flatten(),
-            nn.Linear(16*4*d, 64),
+            nn.Linear(16*4*d, self.z_dim),
             ).to(device)
         self.dec = nn.Sequential(
             
-            nn.Linear(64, 64*8*d),
+            nn.Linear(self.z_dim, 64*8*d),
             nn.Unflatten(1, (8*d, 8, 8)),
             
             nn.ConvTranspose2d(8*d, 4*d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
@@ -286,11 +257,15 @@ class WAE_MMD_celebA_v0(WAE_MMD_abstract):
             nn.BatchNorm2d(2*d),
             nn.ReLU(True),
             
+            nn.Conv2d(2*d, 2*d, kernel_size = 3, padding = 1),
+            nn.BatchNorm2d(2*d),
+            nn.ReLU(True),
+            
             nn.ConvTranspose2d(2*d, d, kernel_size = 5, stride = 2, padding = 2, output_padding = 1),
             nn.BatchNorm2d(d),
             nn.ReLU(True),
             
-            nn.Conv2d(d, d, kernel_size = 5, padding = 2),
+            nn.Conv2d(d, d, kernel_size = 3, padding = 1),
             nn.BatchNorm2d(d),
             nn.ReLU(True),
             
@@ -302,7 +277,6 @@ class WAE_MMD_celebA_v0(WAE_MMD_abstract):
         init_params(self.enc)
         init_params(self.dec)
 
-        self.z_dim = 64
         self.hist = network_info['train']['histogram']
         
     def k(self, x, y):

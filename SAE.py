@@ -19,18 +19,18 @@ import pandas as pd
 from .util import init_params, inc_avg
 
 class WAE_MMD_abstract(nn.Module):
-    def __init__(self, network_info, log, device = 'cpu'):
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
         super(WAE_MMD_abstract, self).__init__()
         self.log = log
+        if verbose == 1:
+            self.log.info('------------------------------------------------------------')
+            for dd in network_info['train']:
+                self.log.info('%s : %s' % (dd, network_info['train'][dd]))
 
-        self.log.info('------------------------------------------------------------')
-        for dd in network_info['train']:
-            self.log.info('%s : %s' % (dd, network_info['train'][dd]))
+            log.info('batch_size: %i' % network_info['train']['train_generator'].batch_size)
 
-        log.info('batch_size: %i' % network_info['train']['train_generator'].batch_size)
-
-        for dd in network_info['path']:
-            self.log.info('%s : %s' % (dd, network_info['path'][dd]))
+            for dd in network_info['path']:
+                self.log.info('%s : %s' % (dd, network_info['path'][dd]))
         
         # Abstract Part. Need overriding here
         self.enc = nn.Identity()
@@ -213,14 +213,14 @@ class WAE_MMD_abstract(nn.Module):
                         self.log.info("model saved, obj: %.6e" % obj)
                 else:
                     self.save(self.save_path)
-                    self.log.info("model saved at: %s" % self.save_path)
+#                     self.log.info("model saved at: %s" % self.save_path)
                         
             if self.lamb_exp is not None:
                 self.lamb = self.lamb_exp * self.lamb
             
         if not self.validate_batch:
             self.save(self.save_path)
-            self.log.info("model saved at: %s" % self.save_path)
+#             self.log.info("model saved at: %s" % self.save_path)
 
         self.log.info('Training Finished!')
         self.log.info("Elapsed time: %.3fs" % (time.time() - start_time))
@@ -313,8 +313,8 @@ class WAE_MMD_abstract(nn.Module):
 
             
 class WAE_MMD_swiss(WAE_MMD_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(WAE_MMD_swiss, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(WAE_MMD_swiss, self).__init__(network_info, log, device, verbose)
     
         self.enc = nn.Sequential(
             nn.Linear(3, 50),
@@ -342,8 +342,8 @@ class WAE_MMD_swiss(WAE_MMD_abstract):
         return (C/(C + (x.unsqueeze(0) - y.unsqueeze(1)).pow(2).sum(dim = 2))).sum()
     
 class SAE_abstract(WAE_MMD_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(SAE_abstract, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(SAE_abstract, self).__init__(network_info, log, device, verbose)
 
         self.eps = network_info['train']['eps']
         self.L = network_info['train']['L']
@@ -383,8 +383,8 @@ class SAE_abstract(WAE_MMD_abstract):
         
     
 class SAE_swiss(SAE_abstract):
-    def __init__(self, network_info, log, device = 'cpu'):
-        super(SAE_swiss, self).__init__(network_info, log, device)
+    def __init__(self, network_info, log, device = 'cpu', verbose = 1):
+        super(SAE_swiss, self).__init__(network_info, log, device, verbose)
 
         self.enc = nn.Sequential(
                 nn.Linear(3, 50),
