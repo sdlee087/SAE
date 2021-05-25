@@ -34,4 +34,4 @@ class CelebA(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         with Image.open('%s/%s' % (self.data_home, self.x_list[idx])) as im:
-            return self.transform(im)
+            return 2.0*self.transform(im) - 1.0

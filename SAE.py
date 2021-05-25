@@ -11,12 +11,17 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 from torch.utils.tensorboard import SummaryWriter
+import tensorflow as tf
+import tensorboard as tb
+tf.io.gfile = tb.compat.tensorflow_stub.io.gfile
 
 import numpy as np
 import pandas as pd
 
 from .util import init_params, inc_avg
+from .util import get_lr
 
 class WAE_MMD_abstract(nn.Module):
     def __init__(self, network_info, log, device = 'cpu', verbose = 1):
@@ -51,10 +56,16 @@ class WAE_MMD_abstract(nn.Module):
         self.n_test = len(self.test_generator.dataset)
         self.validate_batch = network_info['train']['validate']
         
+        self.encoder_pretrain = network_info['train']['encoder_pretrain']
+        if self.encoder_pretrain:
+            self.encoder_pretrain_batch_size = network_info['train']['encoder_pretrain_batch_size']
+            self.encoder_pretrain_epoch = network_info['train']['encoder_pretrain_max_epoch']
+        
         self.lr = network_info['train']['lr']
         self.beta1 = network_info['train']['beta1']
         self.lamb = network_info['train']['lambda']
-        self.lamb_exp = network_info['train']['lambda_exp']
+        # self.lamb_exp = network_info['train']['lambda_exp']
+        self.lr_schedule = network_info['train']['lr_schedule']
         
         self.num_epoch = network_info['train']['epoch']
         self.iteration = network_info['train']['iter_per_epoch']
@@ -87,6 +98,13 @@ class WAE_MMD_abstract(nn.Module):
 
     def load(self, dir):
         self.load_state_dict(torch.load(dir))
+        
+    def pretrain_encoder(self):
+        optimizer = optim.Adam(list(self.enc.parameters()))
+        self.enc.train()
+        self.log.info('------------------------------------------------------------')
+        self.log.info('Pretraining Start!')
+        
 
     def train(self):
         self.train_mse_list = []
@@ -97,9 +115,17 @@ class WAE_MMD_abstract(nn.Module):
         mse = nn.MSELoss()
         optimizer = optim.Adam(list(self.enc.parameters()) + list(self.dec.parameters()), 
                                        lr = self.lr, betas = (self.beta1, 0.999))
+        self.log.info('lr : %s' % get_lr(optimizer))
+        if self.lr_schedule is "manual":
+            lamb = lambda e: 1.0 * (0.5 ** (e >= 30)) * (0.2 ** (e >= 50)) * (0.1 ** (e >= 100))
+            scheduler = optim.lr_scheduler.LambdaLR(optimizer, lamb)
+            
         
         self.enc.train()
         self.dec.train()
+        
+        if self.encoder_pretrain:
+            self.pretrain_encoder()
 
         if self.tensorboard_dir is not None:
             self.writer = SummaryWriter(self.tensorboard_dir)
@@ -110,6 +136,7 @@ class WAE_MMD_abstract(nn.Module):
         
         for epoch in range(self.num_epoch):
             # train_step
+            # self.log.info('lr : %s' % get_lr(optimizer))
             train_loss_mse = inc_avg()
             train_loss_penalty = inc_avg()
             
@@ -197,10 +224,10 @@ class WAE_MMD_abstract(nn.Module):
 
                         # Sample Generation
                         test_dec = self.dec(prior_z).detach().to('cpu').numpy()
-                        self.writer.add_images('generated_sample', test_dec[0:32], epoch)
+                        self.writer.add_images('generated_sample', (test_dec[0:32])*0.5 + 0.5, epoch)
 
                     # Reconstruction
-                    self.writer.add_images('reconstruction', np.concatenate((x.to('cpu').numpy()[0:16], recon.to('cpu').numpy()[0:16])), epoch)
+                    self.writer.add_images('reconstruction', (np.concatenate((x.to('cpu').numpy()[0:16], recon.to('cpu').numpy()[0:16])))*0.5 + 0.5, epoch)
                     self.writer.flush()
                     
                 
@@ -213,14 +240,17 @@ class WAE_MMD_abstract(nn.Module):
                         self.log.info("model saved, obj: %.6e" % obj)
                 else:
                     self.save(self.save_path)
-#                     self.log.info("model saved at: %s" % self.save_path)
+                    # self.log.info("model saved at: %s" % self.save_path)
                         
             if self.lamb_exp is not None:
                 self.lamb = self.lamb_exp * self.lamb
+                
+            if self.lr_schedule is not None:
+                scheduler.step()
             
         if not self.validate_batch:
             self.save(self.save_path)
-#             self.log.info("model saved at: %s" % self.save_path)
+            # self.log.info("model saved at: %s" % self.save_path)
 
         self.log.info('Training Finished!')
         self.log.info("Elapsed time: %.3fs" % (time.time() - start_time))

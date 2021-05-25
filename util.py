@@ -15,7 +15,8 @@ class inc_avg():
 def init_params(model):
     for p in model.parameters():
         if(p.dim() > 1):
-            nn.init.xavier_normal_(p)
+            # nn.init.xavier_normal_(p)
+            nn.init.trunc_normal_(p, std = 0.01, a = -0.02, b = 0.02)
         else:
             nn.init.uniform_(p, 0.1, 0.2)
 
@@ -28,6 +29,10 @@ def gaus(x, y, device = 'cpu'):
 def h_sphere(x, y, device = 'cpu'):
     xyz = torch.normal(0, 1, size = (x,y))
     return (xyz/xyz.norm(dim = 1).unsqueeze(1)).to(device)
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 
 def make_swiss_roll(num_points,radius_scaling=0.0,num_periods=3,z_max=20.0):
     """
