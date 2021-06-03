@@ -16,9 +16,9 @@ class ToyDataset(torch.utils.data.Dataset):
         return self.data[idx]
 
 class CelebA(torch.utils.data.Dataset):
-    def __init__(self, data_home):
+    def __init__(self, data_home, x_list):
         self.data_home = '%s/img_align_celeba' % data_home
-        self.x_list = np.load('%s/x_list.npy' % data_home)
+        self.x_list = np.load('%s/%s' % (data_home, x_list))
         # self.list_attr = pd.read_csv('%s/list_attr_celeba.csv' % data_home)
         # self.list_bbox = pd.read_csv('%s/list_bbox_celeba.csv' % data_home)
         # self.list_eval = pd.read_csv('%s/list_eval_partition.csv' % data_home)
@@ -34,4 +34,4 @@ class CelebA(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         with Image.open('%s/%s' % (self.data_home, self.x_list[idx])) as im:
-            return self.transform(im)
+            return 2.0*self.transform(im) - 1.0
