@@ -32,8 +32,6 @@ class WAE_MMD_abstract(nn.Module):
             for dd in network_info['train']:
                 self.log.info('%s : %s' % (dd, network_info['train'][dd]))
 
-            log.info('batch_size: %i' % network_info['train']['train_generator'].batch_size)
-
             for dd in network_info['path']:
                 self.log.info('%s : %s' % (dd, network_info['path'][dd]))
         
@@ -45,8 +43,12 @@ class WAE_MMD_abstract(nn.Module):
         # Concrete Part.        
         self.device = device
         self.z_sampler = network_info['train']['z_sampler'] # generate prior
-        self.train_generator = network_info['train']['train_generator'] # generate one mini-batch
-        self.test_generator = network_info['train']['test_generator'] # generate whole test dataset in batch
+        self.train_data = network_info['train']['train_data'] 
+        self.test_data = network_info['train']['test_data'] 
+        self.batch_size = network_info['train']['batch_size'] 
+        
+        self.train_generator = torch.utils.data.DataLoader(self.train_data, self.batch_size, num_workers = 5, shuffle = True, pin_memory=True, drop_last=True)
+        self.test_generator = torch.utils.data.DataLoader(self.test_data, self.batch_size, num_workers = 5, shuffle = True, pin_memory=True, drop_last=True)
         
         self.save_path = network_info['path']['save_path']
         self.save_best = network_info['path']['save_best']
@@ -59,7 +61,8 @@ class WAE_MMD_abstract(nn.Module):
         self.encoder_pretrain = network_info['train']['encoder_pretrain']
         if self.encoder_pretrain:
             self.encoder_pretrain_batch_size = network_info['train']['encoder_pretrain_batch_size']
-            self.encoder_pretrain_epoch = network_info['train']['encoder_pretrain_max_epoch']
+            self.encoder_pretrain_step = network_info['train']['encoder_pretrain_max_step']
+            self.pretrain_generator = torch.utils.data.DataLoader(self.train_data, self.encoder_pretrain_batch_size, num_workers = 5, shuffle = True, pin_memory=True, drop_last=True)
         
         self.lr = network_info['train']['lr']
         self.beta1 = network_info['train']['beta1']
@@ -77,12 +80,12 @@ class WAE_MMD_abstract(nn.Module):
         self.best_obj = [0, float('inf')]
         
     
-    def k(self, x, y):
+    def k(self, x, y, diag = True):
         #Abstract method
         raise NotImplementedError
         
     def emp_dist(self, x, y, n):
-        return (self.k(x,x) + self.k(y,y))/(n*(n-1)) - 2*self.k(x,y)/(n*n)
+        return (self.k(x,x, False) + self.k(y,y, False))/(n*(n-1)) - 2*self.k(x,y, True)/(n*n)
         
     def forward(self, x):
         return self.dec(self.enc(x))
@@ -100,11 +103,42 @@ class WAE_MMD_abstract(nn.Module):
         self.load_state_dict(torch.load(dir))
         
     def pretrain_encoder(self):
-        optimizer = optim.Adam(list(self.enc.parameters()))
-        self.enc.train()
+        optimizer = optim.Adam(list(self.enc.parameters()), lr = self.lr, betas = (self.beta1, 0.999))
+        mse = nn.MSELoss()
+        
         self.log.info('------------------------------------------------------------')
         self.log.info('Pretraining Start!')
         
+        cur_step = 0
+        break_ind = False
+        while True:
+            for i, data in enumerate(self.pretrain_generator):
+                cur_step = cur_step + 1
+                pz = self.z_sampler(len(data), self.z_dim, device = self.device)
+                x = data.to(self.device)
+                qz = self.enc(x)
+
+                qz_mean = torch.mean(qz, dim = 0)
+                pz_mean = torch.mean(pz, dim = 0)
+
+                qz_cov = torch.mean(torch.matmul((qz - qz_mean).unsqueeze(2), (qz - qz_mean).unsqueeze(1)), dim = 0)
+                pz_cov = torch.mean(torch.matmul((pz - pz_mean).unsqueeze(2), (pz - pz_mean).unsqueeze(1)), dim = 0)
+
+                loss = mse(pz_mean, qz_mean) + mse(pz_cov, qz_cov)
+
+                loss.backward()
+                optimizer.step()
+                
+                # train_loss_mse.append(loss.item(), len(data))
+                if loss.item() > 0.1 or cur_step < 10:
+                    print('train_mse: %.4f at %i step' % (loss.item(), cur_step), end = "\r")
+                else:
+                    self.log.info('train_mse: %.4f at %i step' % (loss.item(), cur_step))
+                    break_ind = True
+                    break
+                    
+            if break_ind or cur_step >= self.encoder_pretrain_step:
+                break
 
     def train(self):
         self.train_mse_list = []
@@ -112,6 +146,16 @@ class WAE_MMD_abstract(nn.Module):
         self.test_mse_list = []
         self.test_penalty_list = []
         
+        self.enc.train()
+        self.dec.train()
+            
+        if self.encoder_pretrain:
+            self.pretrain_encoder()
+            self.log.info('Pretraining Ended!')
+            
+        if self.tensorboard_dir is not None:
+            self.writer = SummaryWriter(self.tensorboard_dir)
+            
         mse = nn.MSELoss()
         optimizer = optim.Adam(list(self.enc.parameters()) + list(self.dec.parameters()), 
                                        lr = self.lr, betas = (self.beta1, 0.999))
@@ -119,16 +163,6 @@ class WAE_MMD_abstract(nn.Module):
         if self.lr_schedule is "manual":
             lamb = lambda e: 1.0 * (0.5 ** (e >= 30)) * (0.2 ** (e >= 50)) * (0.1 ** (e >= 100))
             scheduler = optim.lr_scheduler.LambdaLR(optimizer, lamb)
-            
-        
-        self.enc.train()
-        self.dec.train()
-        
-        if self.encoder_pretrain:
-            self.pretrain_encoder()
-
-        if self.tensorboard_dir is not None:
-            self.writer = SummaryWriter(self.tensorboard_dir)
 
         self.log.info('------------------------------------------------------------')
         self.log.info('Training Start!')
@@ -242,8 +276,8 @@ class WAE_MMD_abstract(nn.Module):
                     self.save(self.save_path)
                     # self.log.info("model saved at: %s" % self.save_path)
                         
-            if self.lamb_exp is not None:
-                self.lamb = self.lamb_exp * self.lamb
+            # if self.lamb_exp is not None:
+            #    self.lamb = self.lamb_exp * self.lamb
                 
             if self.lr_schedule is not None:
                 scheduler.step()
